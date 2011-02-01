@@ -1,11 +1,3 @@
-if RUBY_VERSION >= "1.9"
-  STDERR.puts "\n\n"
-  STDERR.puts "***************************************************************************************"
-  STDERR.puts "************************** ruby 1.9 is not supported (yet) =( *************************"
-  STDERR.puts "***************************************************************************************"
-  exit(1)
-end
-
 require 'mkmf'
 require 'fileutils'
 
@@ -73,6 +65,10 @@ end
 
 def add_define(name)
   $defs.push("-D#{name}")
+end
+
+if RUBY_VERSION >= "1.9"
+  add_define "_RUBY_19_"
 end
 
 if RUBY_PLATFORM =~ /linux/
@@ -150,63 +146,65 @@ if have_header('mach-o/dyld.h')
   # XXX How to determine this properly? RUBY_PLATFORM reports "i686-darwin10.2.0" on Snow Leopard.
   add_define "_ARCH_x86_64_"
 
-  sizes_of = [
-    'RVALUE',
-    'struct heaps_slot'
-  ]
+  if RUBY_VERSION < "1.9"
+    sizes_of = [
+      'RVALUE',
+      'struct heaps_slot'
+    ]
 
-  offsets_of = {
-    'struct heaps_slot' => %w[ slot limit ],
-    'struct BLOCK' => %w[ body var cref self klass wrapper block_obj orig_thread dyna_vars scope prev ],
-    'struct METHOD' => %w[ klass rklass recv id oid body ]
-  }
+    offsets_of = {
+      'struct heaps_slot' => %w[ slot limit ],
+      'struct BLOCK' => %w[ body var cref self klass wrapper block_obj orig_thread dyna_vars scope prev ],
+      'struct METHOD' => %w[ klass rklass recv id oid body ]
+    }
 
-  addresses_of = [
-    # 'add_freelist',
-    # 'rb_newobj',
-    # 'freelist',
-    # 'heaps',
-    # 'heaps_used',
-    # 'finalizer_table'
-  ]
+    addresses_of = [
+      # 'add_freelist',
+      # 'rb_newobj',
+      # 'freelist',
+      # 'heaps',
+      # 'heaps_used',
+      # 'finalizer_table'
+    ]
 
-  expressions = []
+    expressions = []
 
-  sizes_of.each do |type|
-    name = type.sub(/^struct\s*/,'')
-    expressions << ["sizeof__#{name}", "sizeof(#{type})"]
-  end
-  offsets_of.each do |type, members|
-    name = type.sub(/^struct\s*/,'')
-    members.each do |member|
-      expressions << ["offset__#{name}__#{member}", "(size_t)&(((#{type} *)0)->#{member})"]
+    sizes_of.each do |type|
+      name = type.sub(/^struct\s*/,'')
+      expressions << ["sizeof__#{name}", "sizeof(#{type})"]
     end
-  end
-  addresses_of.each do |name|
-    expressions << ["address__#{name}", "&#{name}"]
-  end
-
-  pid = fork{sleep while true}
-  output = IO.popen('gdb --interpreter=mi --quiet', 'w+') do |io|
-    io.puts "attach #{pid}"
-    expressions.each do |name, expr|
-      io.puts "-data-evaluate-expression #{expr.dump}"
+    offsets_of.each do |type, members|
+      name = type.sub(/^struct\s*/,'')
+      members.each do |member|
+        expressions << ["offset__#{name}__#{member}", "(size_t)&(((#{type} *)0)->#{member})"]
+      end
     end
-    io.puts 'quit'
-    io.puts 'y'
-    io.close_write
-    io.read
-  end
-  Process.kill 9, pid
+    addresses_of.each do |name|
+      expressions << ["address__#{name}", "&#{name}"]
+    end
 
-  attach, *results = output.grep(/^\^/).map{ |l| l.strip }
-  if results.find{ |l| l =~ /^\^error/ }
-    raise "Unsupported platform: #{results.inspect}"
-  end
+    pid = fork{sleep while true}
+    output = IO.popen('gdb --interpreter=mi --quiet', 'w+') do |io|
+      io.puts "attach #{pid}"
+      expressions.each do |name, expr|
+        io.puts "-data-evaluate-expression #{expr.dump}"
+      end
+      io.puts 'quit'
+      io.puts 'y'
+      io.close_write
+      io.read
+    end
+    Process.kill 9, pid
 
-  values = results.map{ |l| l[/value="(.+?)"/, 1] }
-  vars = Hash[ *expressions.map{|n,e| n }.zip(values).flatten ].each do |name, val|
-    add_define "#{name}=#{val.split.first}"
+    attach, *results = output.grep(/^\^/).map{ |l| l.strip }
+    if results.find{ |l| l =~ /^\^error/ }
+      raise "Unsupported platform: #{results.inspect}"
+    end
+
+    values = results.map{ |l| l[/value="(.+?)"/, 1] }
+    vars = Hash[ *expressions.map{|n,e| n }.zip(values).flatten ].each do |name, val|
+      add_define "#{name}=#{val.split.first}"
+    end
   end
 end
 

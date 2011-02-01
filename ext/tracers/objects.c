@@ -109,14 +109,16 @@ type_string(int type) {
       return "match";
     case T_SYMBOL:
       return "symbol";
-    case T_BLKTAG:
-      return "blktag";
     case T_UNDEF:
       return "undef";
+#ifndef _RUBY_19_
+    case T_BLKTAG:
+      return "blktag";
     case T_VARMAP:
       return "varmap";
     case T_SCOPE:
       return "scope";
+#endif
     case T_NODE:
       return "node";
     default:

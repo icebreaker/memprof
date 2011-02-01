@@ -15,9 +15,13 @@
 #include <unistd.h>
 #include <sysexits.h>
 
+#ifdef _RUBY_19_
+#include <ruby/st.h>
+#else
 #include <st.h>
 #include <intern.h>
 #include <node.h>
+#endif
 
 #include "arch.h"
 #include "bin_api.h"
@@ -48,6 +52,7 @@ struct memprof_config memprof_config;
 static void init_memprof_config_base();
 static void init_memprof_config_extended();
 
+#ifndef _RUBY_19_
 struct obj_track {
   VALUE obj;
   char *source;
@@ -233,6 +238,7 @@ objs_to_array(st_data_t key, st_data_t record, st_data_t arg)
 static VALUE
 memprof_start(VALUE self)
 {
+#ifndef _RUBY_19_
   if (!memprof_started) {
     insert_tramp("rb_newobj", newobj_tramp);
     insert_tramp("add_freelist", freelist_tramp);
@@ -244,6 +250,7 @@ memprof_start(VALUE self)
 
   track_objs = 1;
   return Qtrue;
+#endif
 }
 
 static VALUE
@@ -321,19 +328,6 @@ memprof_stats_bang(int argc, VALUE *argv, VALUE self)
   return Qnil;
 }
 
-static void
-json_print(void *ctx, const char * str, unsigned int len)
-{
-  FILE *out = (FILE *)ctx;
-  size_t written = 0;
-  while(1) {
-    written += fwrite(str + written, sizeof(char), len - written, out ? out : stdout);
-    if (written == len) break;
-  }
-  if (str && len > 0 && str[0] == '\n' && out)
-    fflush(out);
-}
-
 static VALUE
 memprof_track(int argc, VALUE *argv, VALUE self)
 {
@@ -345,6 +339,20 @@ memprof_track(int argc, VALUE *argv, VALUE self)
   memprof_stats(argc, argv, self);
   memprof_stop(self);
   return Qnil;
+}
+#endif
+
+static void
+json_print(void *ctx, const char * str, unsigned int len)
+{
+  FILE *out = (FILE *)ctx;
+  size_t written = 0;
+  while(1) {
+    written += fwrite(str + written, sizeof(char), len - written, out ? out : stdout);
+    if (written == len) break;
+  }
+  if (str && len > 0 && str[0] == '\n' && out)
+    fflush(out);
 }
 
 static json_gen_status
@@ -588,9 +596,12 @@ memprof_trace_request(VALUE self, VALUE env)
 }
 
 #include "json.h"
+
+#ifndef _RUBY_19_
 #include "env.h"
 #include "rubyio.h"
 #include "re.h"
+#endif
 
 #ifndef RARRAY_PTR
 #define RARRAY_PTR(ary) RARRAY(ary)->ptr
@@ -608,6 +619,7 @@ memprof_trace_request(VALUE self, VALUE env)
 #define RSTRING_LEN(str) RSTRING(str)->len
 #endif
 
+#ifndef _RUBY_19_
 static int
 each_hash_entry(st_data_t key, st_data_t record, st_data_t arg)
 {
@@ -1698,6 +1710,7 @@ memprof_dump_all(int argc, VALUE *argv, VALUE self)
 
   return Qnil;
 }
+#endif
 
 static void
 init_memprof_config_base() {
@@ -1710,6 +1723,7 @@ init_memprof_config_base() {
 
 static void
 init_memprof_config_extended() {
+#ifndef _RUBY_19_
   /* If we don't have add_freelist, find the functions it gets inlined into */
   memprof_config.add_freelist               = bin_find_symbol("add_freelist", NULL, 0);
 
@@ -1923,6 +1937,7 @@ init_memprof_config_extended() {
 
     errx(EX_SOFTWARE, "If that doesn't work, please email this output to bugs@memprof.com");
   }
+#endif
 }
 
 void
@@ -1930,6 +1945,7 @@ Init_memprof()
 {
   VALUE memprof = rb_define_module("Memprof");
   eUnsupported = rb_define_class_under(memprof, "Unsupported", rb_eStandardError);
+#ifndef _RUBY_19_
   rb_define_singleton_method(memprof, "start", memprof_start, 0);
   rb_define_singleton_method(memprof, "stop", memprof_stop, 0);
   rb_define_singleton_method(memprof, "stats", memprof_stats, -1);
@@ -1937,6 +1953,7 @@ Init_memprof()
   rb_define_singleton_method(memprof, "track", memprof_track, -1);
   rb_define_singleton_method(memprof, "dump", memprof_dump, -1);
   rb_define_singleton_method(memprof, "dump_all", memprof_dump_all, -1);
+#endif
   rb_define_singleton_method(memprof, "trace", memprof_trace, -1);
   rb_define_singleton_method(memprof, "trace_request", memprof_trace_request, 1);
   rb_define_singleton_method(memprof, "trace_filename", memprof_trace_filename_get, 0);
@@ -1957,17 +1974,19 @@ Init_memprof()
   install_memcache_tracer();
   install_resources_tracer();
 
+#ifndef _RUBY_19_
   gc_hook = Data_Wrap_Struct(rb_cObject, sourcefile_marker, NULL, NULL);
   rb_global_variable(&gc_hook);
 
-  rb_classname = memprof_config.classname;
   rb_add_freelist = memprof_config.add_freelist;
+  ptr_to_rb_mark_table_add_filename = memprof_config.rb_mark_table_add_filename;
+  rb_classname = memprof_config.classname;
+  assert(rb_classname);
+#endif
+
   rb_bm_mark = memprof_config.bm_mark;
   rb_blk_free = memprof_config.blk_free;
   rb_thread_mark = memprof_config.thread_mark;
-  ptr_to_rb_mark_table_add_filename = memprof_config.rb_mark_table_add_filename;
-
-  assert(rb_classname);
 
   return;
 }

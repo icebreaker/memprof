@@ -239,6 +239,8 @@ should_update_image(int index) {
     const char *possible_libruby = (image->imageFilePath + len - 13);
     if (strcmp(possible_libruby, "libruby.dylib") == 0)
       return hdr;
+    if (strcmp(possible_libruby, "y.1.9.1.dylib") == 0)
+      return hdr;
   }
 
   return NULL;
@@ -687,7 +689,9 @@ bin_update_image(const char *trampee, struct tramp_st2_entry *tramp, void **orig
       if ((current_hdr = should_update_image(i)) == NULL)
         continue;
 
+      dbg_printf("checking bin for %s\n", cfg->filename);
       if (update_bin_for_mach_header(current_hdr, _dyld_get_image_vmaddr_slide(i), trampee_addr, tramp) == 0) {
+        dbg_printf("found %s in %s\n", trampee, cfg->filename);
         ret = 0;
         if (orig_function)
           *orig_function = trampee_addr;

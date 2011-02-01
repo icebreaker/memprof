@@ -21,17 +21,30 @@ struct memprof_gc_stats {
 
 static struct tracer tracer;
 static struct memprof_gc_stats stats;
+#ifdef _RUBY_19_
+static int (*orig_garbage_collect)(void *);
+#else
 static void (*orig_garbage_collect)();
+#endif
 
+#ifdef _RUBY_19_
+static int
+gc_tramp(void *objspace)
+#else
 static void
 gc_tramp()
+#endif
 {
   uint64_t millis = 0;
   struct rusage usage_start, usage_end;
 
   millis = timeofday_ms();
   getrusage(RUSAGE_SELF, &usage_start);
+#ifdef _RUBY_19_
+  orig_garbage_collect(objspace);
+#else
   orig_garbage_collect();
+#endif
   getrusage(RUSAGE_SELF, &usage_end);
   millis = timeofday_ms() - millis;
 
