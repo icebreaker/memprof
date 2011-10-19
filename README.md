@@ -225,7 +225,7 @@ information about the request itself.
 ## Memprof::Middleware
 
     require 'memprof/middleware'
-    config.middlewares.use(Memprof::Middleware)
+    config.middleware.use(Memprof::Middleware)
 
 Wrap each request in a `Memprof.track` to print out all object
 location/type pairs created during that request.
